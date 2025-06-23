@@ -12,22 +12,20 @@ from kbexports.kbe_processor import custom_data_processor
 def shiprocket_daily():
     KBBIOBase.metadata.create_all(bind=kbbio_engine)
     db_kbbio = DatabaseCrud(kbbio_connector)
-
     from_date = datetime.today() - timedelta(days=500)
     to_date = datetime.today()
-
     from_date_str = from_date.strftime('%Y-%m-%d')
     to_date_str = to_date.strftime('%Y-%m-%d')
-
     try:
         df = get_all_orders(start_date=from_date_str, end_date=to_date_str)
         if df.empty:
             logger.info("No orders found to process.")
             return
+        
         shiprocket_ids = df['shiprocket_id'].dropna().unique().tolist()
+
         if shiprocket_ids:
-            delete_count = db_kbbio.delete_shiprocket_id_wise(shiprocket_ids)
-            logger.info(f"Deleted {delete_count} existing records from DB.")
+            db_kbbio.delete_shiprocket_id_wise(shiprocket_ids)
         else:
             logger.info("No Shiprocket IDs found in data. Skipping deletion step.")
         
@@ -37,6 +35,8 @@ def shiprocket_daily():
         logger.error("Shiprocket sync failed", exc_info=True)
 
 def kbe_custom_import_export(file:str):
+    KBEBase.metadata.create_all(bind=kbe_engine)
+    db_kbe = DatabaseCrud(kbe_connector)
     df = custom_data_processor(file_path=file)
     return df
 

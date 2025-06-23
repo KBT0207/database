@@ -4,6 +4,7 @@ from sqlalchemy import insert, delete, and_, func, cast, select, Numeric, Table,
 from sqlalchemy.exc import SQLAlchemyError
 from models.kbe.kbe_models import KBEImportExport
 from models.shiprocket.shiprocket_models import ShiprocketOrder
+from logging_config import logger
 
 tables = {
     'kbe_import_export':KBEImportExport,
@@ -148,13 +149,30 @@ class DatabaseCrud:
         else:
             print(f"Table '{table_name}' not found in table_mapping.")
 
-    def delete_shiprocket_id_wise(self, shiprocket_id: list):
-        try:
-            queryset = ShiprocketOrder.objects.filter(shiprocket_id__in=shiprocket_id)
-            deleted_count, _ = queryset.delete()
-            return deleted_count
-        except Exception as e:
-            return 0
+    def delete_shiprocket_id_wise(self, shiprocket_id:list, commit: bool):
+            # Try to parse the delete_date with the expected format
+            shiprocket_id_condition = ShiprocketOrder.shiprocket_id.in_(shiprocket_id) 
+            delete_query = delete(ShiprocketOrder).where(shiprocket_id_condition)
+
+            try:
+                with self.db_engine.connect() as connection:
+                    transaction = connection.begin()
+                    try:
+                        result = connection.execute(delete_query)
+                        deleted_count = result.rowcount
+                        logger.info(f"Deleted {deleted_count} rows from Shiprocket Orders.")
+
+                        if commit:
+                            transaction.commit()
+                            logger.info("Transaction committed.")
+                        else:
+                            transaction.rollback()
+                            logger.info("Transaction not committed.")
+                    except SQLAlchemyError as e:
+                        transaction.rollback()
+                        logger.error(f"Error occurred during deletion: {e}")
+            except SQLAlchemyError as e:
+                logger.error(f"Connection error: {e}")
         
 
 
