@@ -1,5 +1,5 @@
 from models.base import KBEBase, KBBIOBase
-from models.kbe.kbe_models import KBEImportExport
+from models.kbe.kbe_models import KBEImportExport, KBEImportExportMapping
 from models.shiprocket.shiprocket_models import ShiprocketOrder
 import pandas as pd
 from sql_connector import  kbbio_engine, kbe_engine, kbbio_connector, kbe_connector
@@ -8,11 +8,13 @@ from Shiprocket.shiprocket import get_all_orders
 from datetime import datetime, date, timedelta
 from logging_config import logger
 from kbexports.kbe_processor import custom_data_processor
+from typing import Optional
+from utils.common_utils import clean_text
 
-def shiprocket_daily():
+def shiprocket_daily(from_days:int):
     KBBIOBase.metadata.create_all(bind=kbbio_engine)
     db_kbbio = DatabaseCrud(kbbio_connector)
-    from_date = datetime.today() - timedelta(days=500)
+    from_date = datetime.today() - timedelta(days=from_days)
     to_date = datetime.today()
     from_date_str = from_date.strftime('%Y-%m-%d')
     to_date_str = to_date.strftime('%Y-%m-%d')
@@ -25,7 +27,7 @@ def shiprocket_daily():
         shiprocket_ids = df['shiprocket_id'].dropna().unique().tolist()
 
         if shiprocket_ids:
-            db_kbbio.delete_shiprocket_id_wise(shiprocket_ids)
+            db_kbbio.delete_shiprocket_id_wise(shiprocket_ids,commit=True)
         else:
             logger.info("No Shiprocket IDs found in data. Skipping deletion step.")
         
@@ -34,13 +36,38 @@ def shiprocket_daily():
     except Exception as e:
         logger.error("Shiprocket sync failed", exc_info=True)
 
-def kbe_custom_import_export(file:str):
+
+
+def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapping_importer: Optional[bool] = None):
     KBEBase.metadata.create_all(bind=kbe_engine)
     db_kbe = DatabaseCrud(kbe_connector)
-    df = custom_data_processor(file_path=file)
+    if custom_data is True:
+        custom_df = custom_data_processor(file_path=file)
+        if not custom_df.empty:
+            db_kbe.import_data(table_name='kbe_import_export', df=custom_df, commit=True)
+        else:
+            print("No data to import from custom_data_processor.")
+
+    elif mapping_importer is True:
+        df = pd.read_excel(file)
+        df.columns = df.columns.str.lower().str.replace(" ","_")
+        if not df.empty:
+            final_col = ['original_importer_name','standardized_importer_name']
+            df['standardized_importer_name'] = df['standardized_importer_name'].apply(clean_text)
+            df = df[final_col]
+            db_kbe.import_data(table_name='kbe_importer_mapping', df=df, commit=True)
+            print(f"Imported {len(df)} records into 'your_mapping_table'")
+        else:
+            print("No data to import from item_mapping_import.")
+
+    else:
+        print("No import option selected.")
+
+
     return df
 
 
 
 if __name__ == "__main__":
-    shiprocket_daily()
+    path = "/mnt/c/Users/Vivek/Desktop/database/importer_classifcation.xlsx"
+    kbe_custom_import_export(file=path,mapping_importer=True)

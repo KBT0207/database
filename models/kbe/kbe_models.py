@@ -40,5 +40,14 @@ class KBEImportExport(KBEBase):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class KBEImportExportMapping(KBEBase):
+    __tablename__ = 'kbe_importer_mapping'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    original_importer_name = Column(String(255))
+    standardized_importer_name = Column(String(255))
+    created_at = Column(DateTime, server_default=func.now())
+
+
 
 
