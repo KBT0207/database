@@ -13,7 +13,8 @@ import pycountry_convert as pc
 from utils.common_utils import (
     read_file_safely,
     calculate_qty,
-    clean_text
+    clean_text,
+    parse_date_flexibly
 )
 from sql_connector import kbbio_engine, kbe_engine, kbbio_connector, kbe_connector
 from models.base import KBEBase, KBBIOBase
@@ -90,7 +91,7 @@ def custom_data_processor(file_path: str) -> pd.DataFrame:
     df = read_file_safely(file_path=file_path)
     df.columns = df.columns.str.lower().str.replace(" ","_")
     df['product_classified'] = pd.Series([pd.NA] * len(df), dtype='string')
-    df['date'] = pd.to_datetime(df['date'],format='%Y-%m-%d',errors='coerce').dt.date
+    df['date'] = df['date'].apply(parse_date_flexibly)
 
     num_col = [
         'quantity','fob_value_inr','unit_price_inr',
@@ -296,9 +297,14 @@ def custom_data_processor(file_path: str) -> pd.DataFrame:
     'importer_country', 'foreign_port', 'foreign_country', 'indian_port',
     'item_no', 'drawback', 'chapter', 'hs_4_digit', 'month', 'year','region']
 
+    if 'importer_country' not in df.columns:
+        df['importer_country'] = df['foreign_country']
+        logger.info("Added column 'importer_country' from 'foreign_country'.")
+
     for col in final_col:
         if col in num_col:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
 
 
     df = df[final_col]

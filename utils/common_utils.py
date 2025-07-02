@@ -3,6 +3,7 @@ import re
 import os
 import pandas as pd
 from logging_config import logger
+from datetime import datetime
 
 def clean_text(value):
     if pd.isna(value):
@@ -77,3 +78,16 @@ def calculate_qty(description, quantity):
         return pd.Series([number1, number2, None, 'OTHER'])
 
     return pd.Series([None, None, None, 'none'])
+
+
+
+
+def parse_date_flexibly(date_str):
+    for fmt in ('%d-%b-%y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y'):
+        try:
+            return datetime.strptime(date_str.strip(), fmt).date()
+        except (ValueError, AttributeError):
+            continue
+    return None  # return None if all formats fail
+
+
