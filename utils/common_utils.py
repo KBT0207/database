@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import os
 import pandas as pd
+from logging_config import logger
 
 def clean_text(value):
     if pd.isna(value):
@@ -30,11 +31,6 @@ def read_file_safely(file_path):
         raise RuntimeError(f"Failed to read file '{file_path}': {e}")
 
 
-import re
-import pandas as pd
-import logging
-
-logger = logging.getLogger(__name__)
 
 def calculate_qty(description, quantity):
     logger.info(f"Calculating quantity from description: {description}, quantity: {quantity}")

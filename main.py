@@ -12,6 +12,7 @@ from typing import Optional
 from utils.common_utils import clean_text
 from sqlalchemy import delete, func
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import sessionmaker
 import glob
 import os
 from kbexports.kbe_processor import kbe_custom_import_export
@@ -45,11 +46,6 @@ def shiprocket_daily(from_days:int):
         logger.error("Shiprocket sync failed", exc_info=True)
 
 
-
-import os
-import glob
-import platform
-
 def folder_path_wise_custom_data_import_in_db(path: str):
     current_os = platform.system()
 
@@ -57,24 +53,19 @@ def folder_path_wise_custom_data_import_in_db(path: str):
         drive_letter = path[0].lower()
         linux_path = "/mnt/" + drive_letter + path[2:].replace("\\", "/")
         path = linux_path
-
     path = os.path.normpath(path)
-
     xlsx_files = glob.glob(os.path.join(path, "**", "*.xlsx"), recursive=True)
-
     if not xlsx_files:
-        print(f"[INFO] No Excel files found in path: {path}")
+        logger.info(f"[INFO] No Excel files found in path: {path}")
         return
-
     for file in xlsx_files:
-        print(f"[PROCESSING] {file}")
+        logger.info(f"[PROCESSING] {file}")
         try:
             kbe_custom_import_export(file=file, custom_data=True)
         except Exception as e:
-            print(f"[ERROR] Failed to process file: {file}")
-            print(f"        Reason: {e}")
+            logger.error(f"[ERROR] Failed to process file: {file}")
+            logger.error(f"Reason: {e}")
             continue
-
 
 
 if __name__=="__main__":

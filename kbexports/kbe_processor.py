@@ -306,6 +306,7 @@ def custom_data_processor(file_path: str) -> pd.DataFrame:
     return df
 
 
+
 def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapping_importer: Optional[bool] = None):
     KBEBase.metadata.create_all(bind=kbe_engine)
     db_kbe = DatabaseCrud(kbe_connector)
@@ -314,13 +315,13 @@ def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapp
         custom_df = custom_data_processor(file_path=file)
 
         if custom_df.empty:
-            print("No data to import from custom_data_processor.")
+            logger.warning("No data to import from custom_data_processor.")
             return
 
         custom_df.columns = custom_df.columns.str.lower().str.strip()
 
         if 'date' not in custom_df.columns:
-            print("'date' column is missing in input file.")
+            logger.error("'date' column is missing in input file.")
             return
 
         custom_df['date'] = pd.to_datetime(custom_df['date'], errors='coerce')
@@ -342,27 +343,27 @@ def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapp
                 df=custom_df,
                 commit=True
             )
+            logger.info(f"Imported custom data from {start_date} to {end_date} into 'kbe_import_export'.")
 
         except SQLAlchemyError as e:
-            print("Error occurred during import:")
-            print(str(e))
+            logger.exception("Error occurred during custom data import:")
 
     elif mapping_importer is True:
-        df = pd.read_excel(file)
-        df.columns = df.columns.str.lower().str.replace(" ", "_")
+        try:
+            df = pd.read_excel(file)
+            df.columns = df.columns.str.lower().str.replace(" ", "_")
 
-        if not df.empty:
-            final_col = ['original_importer_name', 'standardized_importer_name']
-            df['standardized_importer_name'] = df['standardized_importer_name'].apply(clean_text)
-            df = df[final_col]
+            if not df.empty:
+                final_col = ['original_importer_name', 'standardized_importer_name']
+                df['standardized_importer_name'] = df['standardized_importer_name'].apply(clean_text)
+                df = df[final_col]
 
-            db_kbe.import_data(table_name='kbe_importer_mapping', df=df, commit=True)
-            print(f"Imported {len(df)} records into 'kbe_importer_mapping'")
-        else:
-            print("No data to import from item_mapping_import.")
+                db_kbe.import_data(table_name='kbe_importer_mapping', df=df, commit=True)
+                logger.info(f"Imported {len(df)} records into 'kbe_importer_mapping'.")
+            else:
+                logger.warning("No data to import from item_mapping_import.")
+        except Exception as e:
+            logger.exception("Error occurred during importer mapping import:")
 
     else:
-        print("No import option selected.")
-
-
-        print(f"Error: {e}")
+        logger.warning("No import option selected.")
