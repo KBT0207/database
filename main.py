@@ -18,6 +18,7 @@ import os
 from kbexports.kbe_processor import kbe_custom_import_export
 import re
 import platform
+from itertools import chain
 
 
 def shiprocket_daily(from_days:int):
@@ -53,12 +54,17 @@ def folder_path_wise_custom_data_import_in_db(path: str):
         drive_letter = path[0].lower()
         linux_path = "/mnt/" + drive_letter + path[2:].replace("\\", "/")
         path = linux_path
+
     path = os.path.normpath(path)
-    xlsx_files = glob.glob(os.path.join(path, "**", "*.xlsx"), recursive=True)
-    if not xlsx_files:
-        logger.info(f"[INFO] No Excel files found in path: {path}")
+
+    all_files = glob.glob(os.path.join(path, "**", "*.*"), recursive=True)
+    valid_files = [f for f in all_files if f.lower().endswith((".xlsx", ".csv"))]
+
+    if not valid_files:
+        logger.info(f"[INFO] No Excel or CSV files found in path: {path}")
         return
-    for file in xlsx_files:
+
+    for file in valid_files:
         logger.info(f"[PROCESSING] {file}")
         try:
             kbe_custom_import_export(file=file, custom_data=True)
@@ -68,6 +74,7 @@ def folder_path_wise_custom_data_import_in_db(path: str):
             continue
 
 
+
 if __name__=="__main__":
-    path = r"C:\Users\Vivek\Desktop\custom\2023"
+    path = r"C:\Users\Vivek\Desktop\custom\missing"
     folder_path_wise_custom_data_import_in_db(path)
