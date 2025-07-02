@@ -9,6 +9,7 @@ class KBEImportExport(KBEBase):
     date = Column(Date)
     hs_code = Column(String(20))
     product_description = Column(String(1000))
+    product_classified = Column(String(255))
     quantity = Column(Float)
     unit = Column(String(10))
     fob_value_inr = Column(Float)
@@ -37,6 +38,7 @@ class KBEImportExport(KBEBase):
     hs_4_digit = Column(String(10))
     month = Column(String(15))
     year = Column(Integer)
+    region = Column(String(100))
     created_at = Column(DateTime, server_default=func.now())
 
 

@@ -10,6 +10,14 @@ from logging_config import logger
 from kbexports.kbe_processor import custom_data_processor
 from typing import Optional
 from utils.common_utils import clean_text
+from sqlalchemy import delete, func
+from sqlalchemy.exc import SQLAlchemyError
+import glob
+import os
+from kbexports.kbe_processor import kbe_custom_import_export
+import re
+import platform
+
 
 def shiprocket_daily(from_days:int):
     KBBIOBase.metadata.create_all(bind=kbbio_engine)
@@ -38,36 +46,37 @@ def shiprocket_daily(from_days:int):
 
 
 
-def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapping_importer: Optional[bool] = None):
-    KBEBase.metadata.create_all(bind=kbe_engine)
-    db_kbe = DatabaseCrud(kbe_connector)
-    if custom_data is True:
-        custom_df = custom_data_processor(file_path=file)
-        if not custom_df.empty:
-            db_kbe.import_data(table_name='kbe_import_export', df=custom_df, commit=True)
-        else:
-            print("No data to import from custom_data_processor.")
+import os
+import glob
+import platform
 
-    elif mapping_importer is True:
-        df = pd.read_excel(file)
-        df.columns = df.columns.str.lower().str.replace(" ","_")
-        if not df.empty:
-            final_col = ['original_importer_name','standardized_importer_name']
-            df['standardized_importer_name'] = df['standardized_importer_name'].apply(clean_text)
-            df = df[final_col]
-            db_kbe.import_data(table_name='kbe_importer_mapping', df=df, commit=True)
-            print(f"Imported {len(df)} records into 'your_mapping_table'")
-        else:
-            print("No data to import from item_mapping_import.")
+def folder_path_wise_custom_data_import_in_db(path: str):
+    current_os = platform.system()
 
-    else:
-        print("No import option selected.")
+    if current_os == "Linux" and path[1:3] == ":\\":
+        drive_letter = path[0].lower()
+        linux_path = "/mnt/" + drive_letter + path[2:].replace("\\", "/")
+        path = linux_path
+
+    path = os.path.normpath(path)
+
+    xlsx_files = glob.glob(os.path.join(path, "**", "*.xlsx"), recursive=True)
+
+    if not xlsx_files:
+        print(f"[INFO] No Excel files found in path: {path}")
+        return
+
+    for file in xlsx_files:
+        print(f"[PROCESSING] {file}")
+        try:
+            kbe_custom_import_export(file=file, custom_data=True)
+        except Exception as e:
+            print(f"[ERROR] Failed to process file: {file}")
+            print(f"        Reason: {e}")
+            continue
 
 
-    return df
 
-
-
-if __name__ == "__main__":
-    path = "/mnt/c/Users/Vivek/Desktop/database/importer_classifcation.xlsx"
-    kbe_custom_import_export(file=path,mapping_importer=True)
+if __name__=="__main__":
+    path = r"C:\Users\Vivek\Desktop\custom\2023"
+    folder_path_wise_custom_data_import_in_db(path)

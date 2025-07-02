@@ -19,7 +19,8 @@ dependencies = [
     "pycountry (>=24.6.1,<25.0.0)",
     "pycountry-convert (>=0.7.2,<0.8.0)",
     "xlwings (>=0.33.15,<0.34.0)",
-    "logtail-python (>=0.3.3,<0.4.0)"
+    "logtail-python (>=0.3.3,<0.4.0)",
+    "xlsxwriter (>=3.2.5,<4.0.0)"
 ]
 
 

@@ -1,8 +1,28 @@
-import pandas as pd
+import os
 import re
+import glob
 import warnings
-import pycountry_convert as pc
 import numpy as np
+import pandas as pd
+from datetime import datetime, date, timedelta
+from typing import Union, Optional
+from sqlalchemy import delete, func
+from sqlalchemy.exc import SQLAlchemyError
+import pycountry_convert as pc
+
+from utils.common_utils import (
+    read_file_safely,
+    calculate_qty,
+    clean_text
+)
+from sql_connector import kbbio_engine, kbe_engine, kbbio_connector, kbe_connector
+from models.base import KBEBase, KBBIOBase
+from models.kbe.kbe_models import KBEImportExport, KBEImportExportMapping
+from models.shiprocket.shiprocket_models import ShiprocketOrder
+from dbcrud import DatabaseCrud
+from Shiprocket.shiprocket import get_all_orders
+from logging_config import logger
+
 
 
 def clean_to_the_order(name: str) -> str:
@@ -52,9 +72,22 @@ def get_continent(country_name):
         return 'Unknown'
 
 
-def custom_data_processor(file_path):
+def custom_data_processor(file_path: str) -> pd.DataFrame:
+    """
+    Reads and processes a supported data file (Excel or CSV) into a cleaned pandas DataFrame.
+
+    Parameters:
+        file_path (str): Path to the input file. Supported formats: 
+                        .xlsx, .xls, .xlsm, .xlsb, .ods, .odf, .odt, .csv
+
+    Returns:
+        pd.DataFrame: A cleaned and preprocessed DataFrame ready for analysis or database import.
+    """
+    ...
+
+
     warnings.filterwarnings("ignore", message="This pattern is interpreted as a regular expression.*")
-    df = pd.read_excel(file_path)
+    df = read_file_safely(file_path=file_path)
     df.columns = df.columns.str.lower().str.replace(" ","_")
     df['product_classified'] = pd.Series([pd.NA] * len(df), dtype='string')
     df['date'] = pd.to_datetime(df['date'],format='%Y-%m-%d',errors='coerce').dt.date
@@ -245,6 +278,15 @@ def custom_data_processor(file_path):
         .apply(get_continent)
     )
 
+    conversion_map = {
+        'KGA': 1,
+        'KGS': 1,
+        'LBS': 0.453592,
+        'QTL': 100,
+        'MTS': 1000,
+        'MTR':1000,
+    }
+
     final_col = [
     'date', 'hs_code', 'product_description', 'product_classified','quantity', 'unit',
     'fob_value_inr', 'unit_price_inr', 'fob_value_usd', 'fob_value_foreign_currency',
@@ -252,12 +294,75 @@ def custom_data_processor(file_path):
     'iec', 'indian_exporter_name', 'exporter_address', 'exporter_city',
     'pin_code', 'cha_name', 'foreign_importer_name', 'importer_address',
     'importer_country', 'foreign_port', 'foreign_country', 'indian_port',
-    'item_no', 'drawback', 'chapter', 'hs_4_digit', 'month', 'year']
+    'item_no', 'drawback', 'chapter', 'hs_4_digit', 'month', 'year','region']
 
     for col in final_col:
         if col in num_col:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        else:
-            df[col] = df[col].astype(str) 
+
+
+    df = df[final_col]
 
     return df
+
+
+def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapping_importer: Optional[bool] = None):
+    KBEBase.metadata.create_all(bind=kbe_engine)
+    db_kbe = DatabaseCrud(kbe_connector)
+
+    if custom_data is True:
+        custom_df = custom_data_processor(file_path=file)
+
+        if custom_df.empty:
+            print("No data to import from custom_data_processor.")
+            return
+
+        custom_df.columns = custom_df.columns.str.lower().str.strip()
+
+        if 'date' not in custom_df.columns:
+            print("'date' column is missing in input file.")
+            return
+
+        custom_df['date'] = pd.to_datetime(custom_df['date'], errors='coerce')
+        custom_df = custom_df.dropna(subset=['date'])
+
+        start_date = custom_df['date'].min().date().isoformat()
+        end_date = custom_df['date'].max().date().isoformat()
+
+        try:
+            db_kbe.delete_date_range_query(
+                table_name='kbe_import_export',
+                start_date=start_date,
+                end_date=end_date,
+                commit=True
+            )
+
+            db_kbe.import_data(
+                table_name='kbe_import_export',
+                df=custom_df,
+                commit=True
+            )
+
+        except SQLAlchemyError as e:
+            print("Error occurred during import:")
+            print(str(e))
+
+    elif mapping_importer is True:
+        df = pd.read_excel(file)
+        df.columns = df.columns.str.lower().str.replace(" ", "_")
+
+        if not df.empty:
+            final_col = ['original_importer_name', 'standardized_importer_name']
+            df['standardized_importer_name'] = df['standardized_importer_name'].apply(clean_text)
+            df = df[final_col]
+
+            db_kbe.import_data(table_name='kbe_importer_mapping', df=df, commit=True)
+            print(f"Imported {len(df)} records into 'kbe_importer_mapping'")
+        else:
+            print("No data to import from item_mapping_import.")
+
+    else:
+        print("No import option selected.")
+
+
+        print(f"Error: {e}")
