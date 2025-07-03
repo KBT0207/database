@@ -23,6 +23,7 @@ from models.shiprocket.shiprocket_models import ShiprocketOrder
 from dbcrud import DatabaseCrud
 from Shiprocket.shiprocket import get_all_orders
 from logging_config import logger
+from sqlalchemy.orm import sessionmaker
 
 
 
@@ -91,7 +92,8 @@ def custom_data_processor(file_path: str) -> pd.DataFrame:
     df = read_file_safely(file_path=file_path)
     df.columns = df.columns.str.lower().str.replace(" ","_")
     df['product_classified'] = pd.Series([pd.NA] * len(df), dtype='string')
-    df['date'] = df['date'].apply(parse_date_flexibly)
+    df['date'] = pd.to_datetime(df['date'], format='%d-%b-%Y', errors='coerce')
+
 
     num_col = [
         'quantity','fob_value_inr','unit_price_inr',
@@ -302,9 +304,18 @@ def custom_data_processor(file_path: str) -> pd.DataFrame:
         logger.info("Added column 'importer_country' from 'foreign_country'.")
 
     for col in final_col:
-        if col in num_col:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
+        if col not in df.columns:
+            logger.warning(f"Column '{col}' not found in input. Creating with default values.")
+            if col in num_col:
+                df[col] = 0
+            elif col == 'date':
+                df[col] = pd.NaT
+            elif col == 'product_classified':
+                df[col] = 'UNCLASSIFIED'
+            elif col == 'region':
+                df[col] = 'Unknown'
+            else:
+                df[col] = ''
 
 
     df = df[final_col]
@@ -373,3 +384,110 @@ def kbe_custom_import_export(file: str, custom_data: Optional[bool] = None, mapp
 
     else:
         logger.warning("No import option selected.")
+
+
+
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=kbe_engine)
+
+def product_classification():
+    classification_rules = [
+        {
+            'label': 'COCONUT',
+            'include': r'\bcoconut\b',
+            'exclude': r'\b(slice|frozen|cut|dry|dried|powder|milk|chunk|juice|ice)\b',
+        },
+        {
+            'label': 'FRESH GARLIC',
+            'include': r'\bgarlic\b',
+            'exclude': r'\b(slice|frozen|cut|dry|dried|powder|ice)\b',
+        },
+        {
+            'label': 'MIX FRUITS & VEG',
+            'include': r'\b(mixed fruits|mixed vegetables|mix fruit|mix vegetables|mix vegitable|mixed vegetables)\b',
+            'exclude': r'\b(slice|frozen|cut|dry|dried|powder|milk|chunk|juice|ice)\b',
+        },
+        {
+            'label': 'DRUMSTICK',
+            'include': r'\bdrumsticks?\b',
+            'exclude': r'\b(slice|frozen|cut|dry|dried|powder|milk|chunk|juice|ice)\b',
+        },
+        {
+            'label': 'DRAGON FRUITS',
+            'include': r'\bdragon\b',
+            'exclude': r'\b(slice|frozen|cut|dry|dried|powder|milk|chunk|juice|ice)\b',
+        },
+        {
+            'label': 'MANGO',
+            'include': r'\b(mango|alphanso)\b',
+            'exclude': r'\b(pulp|slice|frozen|cut mango|pickle|papad|cut|dry|dried|powder|raw|juice)\b',
+        },
+        {
+            'label': 'BABY CORN',
+            'include': r'\b(baby|babycorn|baby corn)\b',
+            'exclude': r'\b(okra|potato|frozen|iqf|cut|brine|acetic|acid|onion|bananas?|wheat|babyvita|bitter)\b',
+        },
+        {
+            'label': 'POMEGRANATES',
+            'include': r'\b(pome|anar|pomegranate)\b',
+            'exclude': r'\b(aril|pulp|arils|dhana|dana|frozen|iqf|cut|brine)\b',
+        },
+        {
+            'label': 'POMEGRANATES ARILS',
+            'include': r'\b(aril|pomegranate arils|arils)\b',
+            'exclude': r'\b(vinegar|frozen|iqf|cut|brine|acetic|acid|dry|dried)\b',
+        },
+        {
+            'label': 'OKRA',
+            'include': r'\b(okra|lady finger)\b',
+            'exclude': r'\b(frozen|iqf|cut|brine|acetic|acid|dry|dried)\b',
+        },
+        {
+            'label': 'CHILLI',
+            'include': r'\b(chilli|chilly)\b',
+            'exclude': r'\b(frozen|iqf|cut|brine|acetic|acid|dry|dried)\b',
+        },
+        {
+            'label': 'GUAVA',
+            'include': r'\b(guava|peru)\b',
+            'exclude': r'\b(pulp|iqf|cut|brine|acetic|acid|dry|dried)\b',
+        },
+        {
+            'label': 'CHICKOO',
+            'include': r'\b(sapota|chickoo)\b',
+            'exclude': r'\b(pulp|slice|iqf|cut|brine|acetic|acid|dry|dried|frozen)\b',
+        },
+        {
+            'label': 'DUDHI',
+            'include': r'\b(dudhi|bottle gourd|bottleguard)\b',
+            'exclude': r'\b(pulp|slice|iqf|cut|brine|acetic|acid|dry|dried|frozen)\b',
+        },
+        {
+            'label': 'ONION',
+            'include': r'\b(red onion|shallot|small onion|onion)\b',
+            'exclude': r'\b(iqf|cut|brine|acetic|acid|dry|dried|frozen)\b',
+        },
+    ]
+
+    session = SessionLocal()
+    try:
+        products = session.query(KBEImportExport).all()
+        for product in products:
+            desc = (product.product_description or "").lower()
+
+            matched_label = None
+            for rule in classification_rules:
+                if re.search(rule['include'], desc):
+                    if not re.search(rule['exclude'], desc):
+                        matched_label = rule['label']
+                        break
+
+            product.product_classified = matched_label or "UNCLASSIFIED"
+
+        session.commit()
+        print("✅ Product classification completed successfully.")
+    except SQLAlchemyError as e:
+        session.rollback()
+        print(f"❌ Error: {e}")
+    finally:
+        session.close()

@@ -1,11 +1,21 @@
+
 import logging
 import logging.config
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import os
 from datetime import datetime
-from logtail import LogtailHandler
+import pytz
 
+class TZFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, tz=None):
+        super().__init__(fmt, datefmt)
+        self.tz = tz or pytz.utc
 
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, self.tz)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.isoformat()
 
 today_date = datetime.now().strftime('%d-%b-%Y').replace(':', '-')
 
@@ -15,12 +25,15 @@ log_file = os.path.join(log_directory, f"main_{today_date}.log")
 if not os.path.exists(log_directory):
     os.makedirs(log_directory)
 
-# Logging configuration
 LOGGING_CONFIG = {
     'version': 1,
+    'disable_existing_loggers': False,
     'formatters': {
         'standard': {
-            'format': '%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s'
+            '()': TZFormatter,
+            'fmt': '%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S,%f',
+            'tz': pytz.timezone("Asia/Kolkata"),
         }
     },
     'handlers': {
@@ -29,22 +42,19 @@ LOGGING_CONFIG = {
             'formatter': 'standard',
             'level': 'INFO'
         },
-
         'file_handler': {
             'class': 'logging.handlers.TimedRotatingFileHandler',
             'filename': log_file,
-            'when': 'midnight', 
+            'when': 'midnight',
             'interval': 1,
             'backupCount': 30,
-            'formatter': 'standard'
-        },
+            'formatter': 'standard',
+            'encoding': 'utf-8',
+        }
     },
     'loggers': {
         '': {
-            'handlers': [
-                        'console_handler',
-                        'file_handler', 
-                        ],
+            'handlers': ['console_handler', 'file_handler'],
             'level': 'INFO',
             'propagate': False
         }
@@ -54,4 +64,5 @@ LOGGING_CONFIG = {
 logging.config.dictConfig(LOGGING_CONFIG)
 
 logger = logging.getLogger("main")
+
 

@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 import glob
 import os
-from kbexports.kbe_processor import kbe_custom_import_export
+from kbexports.kbe_processor import kbe_custom_import_export,product_classification
 import re
 import platform
 from itertools import chain
@@ -76,5 +76,7 @@ def folder_path_wise_custom_data_import_in_db(path: str):
 
 
 if __name__=="__main__":
-    path = r"C:\Users\Vivek\Desktop\custom\missing"
-    folder_path_wise_custom_data_import_in_db(path)
+    years = [2021]
+    for i in years:
+        path = rf"C:\Users\Vivek\Desktop\custom\{i}"
+        folder_path_wise_custom_data_import_in_db(path)
