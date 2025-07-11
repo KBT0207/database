@@ -76,7 +76,4 @@ def folder_path_wise_custom_data_import_in_db(path: str):
 
 
 if __name__=="__main__":
-    years = [2021]
-    for i in years:
-        path = rf"C:\Users\Vivek\Desktop\custom\{i}"
-        folder_path_wise_custom_data_import_in_db(path)
+    shiprocket_daily(180)
